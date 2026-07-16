@@ -6,10 +6,18 @@
   "scripts": {
     "start": "node src/index.mjs",
     "start:local": "node --env-file=.env src/index.mjs",
-    "check": "node --check src/index.mjs"
+    "start:worker": "node src/media-worker.mjs",
+    "check": "node --check src/index.mjs && node --check src/media-jobs.mjs && node --check src/media-worker.mjs && node --check scripts/deploy.mjs && node --check scripts/setup-media-processing.mjs",
+    "test": "node --test",
+    "deploy": "node scripts/deploy.mjs",
+    "setup:media": "node scripts/setup-media-processing.mjs"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^8.6.0",
+    "@google-cloud/tasks": "^6.1.0",
     "@slack/bolt": "^4.2.1",
+    "@slack/web-api": "^7.16.0",
+    "google-auth-library": "^10.0.0",
     "openai": "^6.20.0"
   }
 }

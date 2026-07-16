@@ -64,8 +64,93 @@ Slack の許可チャンネルで、次のようにメンションしてくだ�
 
 返信は元メッセージのスレッドに投稿されます。
 
+### 画像の読取りと生成
+
+画像を添付して `@gpt` をメンションすると、画像と質問を合わせて解析します。画像を生成したい場合は、たとえば次のように依頼してください。生成結果は同じスレッドに画像ファイルとして投稿されます。
+
+```
+@gpt 雨上がりの東京を走る猫型ロボットの画像を生成して
+```
+
+確実に画像生成だけを実行したい場合は、`image` コマンドを使えます。
+
+```
+@gpt image アザラシが夜の海を泳ぐ、映画のワンシーンのような画像
+```
+
+モデル指定と組み合わせる場合は、`@gpt sol image ...` または `@gpt terra image ...` と書きます。
+
+この機能にはSlackアプリの `files:read` と `files:write` 権限が必要です。マニフェストを更新後、アプリをワークスペースへ再インストールしてください。
+
+`@gpt` へのメンションを受け取ると、Botは元メッセージへ `👀` リアクションを付けて受付を示します。この機能には `reactions:write` 権限も必要です。
+
+### PDF・動画・音声の解析
+
+PDFを添付して `@gpt` をメンションすると、本文だけでなく表・図表・ページ内の画像を含めて質問できます。動画・音声はSlackへ添付するか、公開済みのYouTube URLを含めて `@gpt` をメンションしてください。処理完了後、スレッドには要約・重要論点・時刻を投稿し、全文文字起こしをMarkdownファイルとして添付します。
+
+```
+@gpt このPDFの結論と注意点をまとめて
+@gpt この動画の意思決定を時刻付きで要約して https://www.youtube.com/watch?v=...
+```
+
+- 動画・音声は15分以内。Slack添付は1GBまで、YouTubeは解析用の360pストリームを取得する。
+- 動画・音声・YouTubeの解析はワークスペース全体で1日10本、月90本まで。PDFは件数上限の対象外。
+- 文字起こしはFirestoreへ30日保存するが、元のPDF・音声・動画・抽出フレームはCloud Runの一時領域から処理直後に削除する。
+- YouTubeは公開かつ取得可能な動画だけを対象にする。非公開、年齢制限、取得不能、15分超過の動画は処理しない。
+
+メディア処理はCloud Tasksで非同期化した専用の非公開Cloud Runワーカーが担当します。`npm run deploy` はCloud Tasks、必要なサービスアカウントとIAM、ワーカー、受信サービスを順に設定します。初回だけSlackアプリの `files:read` と `files:write` を再承認してください。
+
+### スレッド内の会話の継続
+
+同じスレッドで再度 `@gpt` をメンションすると、ボットがそのスレッドで受け取った直近の質問と回答を文脈として引き継ぎます。人同士の投稿や、ボットをメンションしていない投稿は読み込みません。
+
+履歴はFirestoreに発言ごとに保存するため、Cloud Runのインスタンス停止・再起動後も引き継がれます。保存件数・保存期間の制限は設けず、保存先はチャンネルIDとスレッドIDごとに分けられます。
+
+### Firestoreの初期設定
+
+Cloud Runと同じGoogle Cloudプロジェクトで、Firestore（Native mode）のデータベースを作成する。Cloud Runには、専用のサービスアカウントを割り当て、そのサービスアカウントに **Cloud Datastore User**（`roles/datastore.user`）だけを付与する。
+
+```sh
+PROJECT_ID=YOUR_PROJECT_ID
+SERVICE_ACCOUNT=openai-slack-bot@${PROJECT_ID}.iam.gserviceaccount.com
+
+gcloud services enable firestore.googleapis.com --project "$PROJECT_ID"
+gcloud iam service-accounts create openai-slack-bot --project "$PROJECT_ID"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member "serviceAccount:$SERVICE_ACCOUNT" \
+  --role roles/datastore.user
+
+for SECRET in openai-api-key slack-bot-token slack-signing-secret; do
+  gcloud secrets add-iam-policy-binding "$SECRET" \
+    --project "$PROJECT_ID" \
+    --member "serviceAccount:$SERVICE_ACCOUNT" \
+    --role roles/secretmanager.secretAccessor
+done
+```
+
+Firestoreデータベースを作成後、Cloud Runのデプロイ時に `--service-account "$SERVICE_ACCOUNT"` を付けて割り当てる。Secret Managerの3つのシークレットに対する読み取り権限も付与する。Cloud Run上では、アプリケーションデフォルト認証でこのサービスアカウントが自動的に使われるため、認証情報ファイルや `GOOGLE_APPLICATION_CREDENTIALS` を設定しない。
+
+会話履歴に保存期間は設けない。データ削除が必要になった場合は、Firestore上の対象スレッドを管理者が明示的に削除する。
+
+保存済みの会話は全件をOpenAI APIへ渡す。長期スレッドでは、APIコスト・応答時間・モデルの入力上限に影響する可能性がある。
+
+`FIRESTORE_CONVERSATION_COLLECTION` は保存先の親コレクション名で、既定値は `slack_conversations` です。
+
+`OPENAI_IMAGE_MODEL` はResponses APIの画像生成ツールに使うモデルで、既定値は最新の `gpt-image-2` です。テキスト回答・画像読取りに使う `OPENAI_MODEL` とは分けているため、画像生成の品質は独立して指定できます。
+
+### デプロイ通知
+
+`DEPLOYMENT_NOTIFICATION_CHANNEL_ID` に通知先のチャンネルIDを設定すると、次のコマンドがBotとしてデプロイ開始・完了・失敗を投稿します。`--summary` は今回追加・変更した機能として投稿内容に含まれます。
+
+```sh
+npm run deploy -- --summary "@gpt image コマンドを追加"
+```
+
+デプロイ時は、直接 `gcloud run deploy` を実行せずこのコマンドを使う。
+
+`npm run setup:media` はCloud TasksキューとIAMだけを明示的に再設定したい場合のコマンドです。ワーカーのIAM付与まで行うには、ワーカーをデプロイ後に `npm run setup:media -- --bind-worker` を実行します。
+
 ## 次の拡張候補
 
-- スレッドの会話履歴を API に渡して、文脈を引き継ぐ
 - 利用量の通知をSlackに送る
 - Cloud Runのサービスアカウントを最小権限にする
