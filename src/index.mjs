@@ -1,6 +1,8 @@
 import { App, LogLevel } from "@slack/bolt";
 import { Firestore } from "@google-cloud/firestore";
+import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
+import { fetchOpenAICosts, monthlyUsageMessage, previousMonthRange } from "./monthly-usage.mjs";
 import {
   enqueueMediaTask,
   eventFiles,
@@ -37,6 +39,12 @@ const allowedChannels = new Set(
 const conversationCollection =
   process.env.FIRESTORE_CONVERSATION_COLLECTION || "slack_conversations";
 const imageModel = process.env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+const usageReportChannel =
+  process.env.MONTHLY_USAGE_REPORT_CHANNEL_ID || process.env.DEPLOYMENT_NOTIFICATION_CHANNEL_ID;
+const usageReportCollection = process.env.FIRESTORE_USAGE_REPORT_COLLECTION || "openai_usage_reports";
+const schedulerServiceAccount = process.env.MONTHLY_USAGE_SCHEDULER_SERVICE_ACCOUNT;
+const schedulerAudience = process.env.MONTHLY_USAGE_SCHEDULER_AUDIENCE;
+const schedulerTokenVerifier = new OAuth2Client();
 const firestore = new Firestore();
 
 const app = new App({
@@ -404,6 +412,78 @@ app.event("app_mention", async ({ event, client, logger, body }) => {
           ? error.message
           : "エラーが発生しました。管理者はサーバーのログを確認してください。",
     });
+  }
+});
+
+async function verifyMonthlyUsageRequest(request) {
+  if (!schedulerServiceAccount || !schedulerAudience) {
+    throw new Error("Monthly usage scheduler authentication is not configured.");
+  }
+  const authorization = request.headers.authorization || "";
+  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!token) return false;
+
+  const ticket = await schedulerTokenVerifier.verifyIdToken({
+    idToken: token,
+    audience: schedulerAudience,
+  });
+  const payload = ticket.getPayload();
+  return payload?.email_verified === true && payload.email === schedulerServiceAccount;
+}
+
+async function postMonthlyUsageReport(client) {
+  if (!process.env.OPENAI_ADMIN_KEY) {
+    throw new Error("OPENAI_ADMIN_KEY is not configured.");
+  }
+  if (!usageReportChannel) {
+    throw new Error("MONTHLY_USAGE_REPORT_CHANNEL_ID is not configured.");
+  }
+
+  const period = previousMonthRange();
+  const reportRef = firestore.collection(usageReportCollection).doc(period.yearMonth);
+  try {
+    await reportRef.create({ status: "processing", period: period.yearMonth, createdAt: new Date() });
+  } catch (error) {
+    if (error?.code === 6) return { alreadyReported: true, period };
+    throw error;
+  }
+
+  try {
+    const usage = await fetchOpenAICosts({
+      apiKey: process.env.OPENAI_ADMIN_KEY,
+      startTime: period.startTime,
+      endTime: period.endTime,
+      projectId: process.env.OPENAI_COST_PROJECT_ID,
+    });
+    const response = await client.chat.postMessage({
+      channel: usageReportChannel,
+      text: monthlyUsageMessage(usage),
+    });
+    await reportRef.update({
+      status: "posted",
+      amount: usage.amount,
+      currency: usage.currency,
+      messageTs: response.ts,
+      postedAt: new Date(),
+    });
+    return { alreadyReported: false, period, usage };
+  } catch (error) {
+    await reportRef.delete();
+    throw error;
+  }
+}
+
+app.receiver.app.post("/internal/monthly-usage", async (request, response) => {
+  try {
+    if (!(await verifyMonthlyUsageRequest(request))) {
+      response.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const result = await postMonthlyUsageReport(app.client);
+    response.status(200).json({ ok: true, alreadyReported: result.alreadyReported, period: result.period.yearMonth });
+  } catch (error) {
+    console.error("Unable to post monthly OpenAI usage report", error);
+    response.status(500).json({ error: "Unable to post monthly usage report" });
   }
 });
 

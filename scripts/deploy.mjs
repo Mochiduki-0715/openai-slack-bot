@@ -10,6 +10,11 @@ const serviceAccount =
 const taskServiceAccount =
   process.env.MEDIA_TASK_SERVICE_ACCOUNT || `${service}-media-task@${project}.iam.gserviceaccount.com`;
 const queue = process.env.MEDIA_TASK_QUEUE || "gpt-slack-media";
+const usageSchedulerServiceAccount =
+  process.env.MONTHLY_USAGE_SCHEDULER_SERVICE_ACCOUNT ||
+  `gpt-monthly-usage-scheduler@${project}.iam.gserviceaccount.com`;
+const usageSecret = process.env.OPENAI_USAGE_SECRET || "openai-usage-admin-key";
+const openaiCostProject = process.env.OPENAI_COST_PROJECT_ID || "proj_11LZLIyW6LWVTNDmQNBE1Dsd";
 
 function gcloud(args) {
   return execFileSync("gcloud", args, { encoding: "utf8" }).trim();
@@ -147,7 +152,7 @@ async function waitForNewRevision(previousRevision, target = service) {
   throw new Error(`Timed out waiting for ${target} to receive 100% traffic.`);
 }
 
-function deployReceiver(workerUrl) {
+function deployReceiver(workerUrl, receiverUrl, channel) {
   return spawnSync(
     "gcloud",
     [
@@ -164,7 +169,9 @@ function deployReceiver(workerUrl) {
       serviceAccount,
       "--clear-base-image",
       "--update-env-vars",
-      `MEDIA_WORKER_URL=${workerUrl},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue}`,
+      `MEDIA_WORKER_URL=${workerUrl},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue},MONTHLY_USAGE_REPORT_CHANNEL_ID=${channel},MONTHLY_USAGE_SCHEDULER_SERVICE_ACCOUNT=${usageSchedulerServiceAccount},MONTHLY_USAGE_SCHEDULER_AUDIENCE=${receiverUrl},OPENAI_COST_PROJECT_ID=${openaiCostProject}`,
+      "--update-secrets",
+      `OPENAI_ADMIN_KEY=${usageSecret}:latest`,
       "--quiet",
     ],
     { stdio: "inherit" },
@@ -224,6 +231,14 @@ function runSetup(args = []) {
   if (result.status !== 0) throw new Error("Media processing setup failed.");
 }
 
+function runMonthlyUsageSetup() {
+  const result = spawnSync("node", ["scripts/setup-monthly-usage-report.mjs"], {
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error("Monthly usage report setup failed.");
+}
+
 function workerUrl() {
   return gcloud([
     "run",
@@ -279,7 +294,10 @@ try {
   updateWorkerAudience(url);
   runSetup(["--bind-worker"]);
 
-  const result = deployReceiver(url);
+  const receiverUrl = serviceStatus().status?.url;
+  if (!receiverUrl) throw new Error("Unable to determine the receiver service URL.");
+  runMonthlyUsageSetup();
+  const result = deployReceiver(url, receiverUrl, channel);
   if (result.error) {
     throw result.error;
   }

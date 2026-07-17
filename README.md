@@ -138,6 +138,18 @@ Firestoreデータベースを作成後、Cloud Runのデプロイ時に `--serv
 
 `OPENAI_IMAGE_MODEL` はResponses APIの画像生成ツールに使うモデルで、既定値は最新の `gpt-image-2` です。テキスト回答・画像読取りに使う `OPENAI_MODEL` とは分けているため、画像生成の品質は独立して指定できます。
 
+### 毎月のOpenAI API利用額通知
+
+毎月1日の9:00（日本時間）に、前月の利用額だけをBotが通知先Slackチャンネルへ投稿します。`npm run deploy` に組み込まれているため、初回だけSecret Managerに `openai-usage-admin-key` を作成してください。値は、OpenAI Platformで作成した **Admin key** のうち `api.usage.read` 権限を持つものです。通常のProject API keyでは利用額を取得できません。
+
+通知先は `MONTHLY_USAGE_REPORT_CHANNEL_ID`（未指定ならデプロイ通知と同じ `DEPLOYMENT_NOTIFICATION_CHANNEL_ID`）です。Cloud Schedulerからの呼び出しはOIDCで認証し、通知済み月はFirestoreの `openai_usage_reports` に記録して重複投稿を防ぎます。
+
+管理キーを登録後、次のデプロイでCloud RunのSecret参照、最小IAM、Cloud Schedulerジョブをまとめて設定します。
+
+```sh
+npm run deploy -- --summary "毎月1日に前月のOpenAI API利用額を通知"
+```
+
 ### デプロイ通知
 
 `DEPLOYMENT_NOTIFICATION_CHANNEL_ID` に通知先のチャンネルIDを設定すると、次のコマンドがBotとしてデプロイ開始・完了・失敗を投稿します。`--summary` は今回追加・変更した機能として投稿内容に含まれます。
@@ -152,5 +164,4 @@ npm run deploy -- --summary "@gpt image コマンドを追加"
 
 ## 次の拡張候補
 
-- 利用量の通知をSlackに送る
 - Cloud Runのサービスアカウントを最小権限にする
