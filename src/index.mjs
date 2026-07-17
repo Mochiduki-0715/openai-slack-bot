@@ -1,4 +1,4 @@
-import { App, LogLevel } from "@slack/bolt";
+import { App, HTTPReceiver, LogLevel } from "@slack/bolt";
 import { Firestore } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
@@ -47,11 +47,20 @@ const schedulerAudience = process.env.MONTHLY_USAGE_SCHEDULER_AUDIENCE;
 const schedulerTokenVerifier = new OAuth2Client();
 const firestore = new Firestore();
 
-const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
+const receiver = new HTTPReceiver({
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  logLevel: LogLevel.INFO,
+  customRoutes: [
+    {
+      path: "/internal/monthly-usage",
+      method: "POST",
+      handler: (request, response) => {
+        void handleMonthlyUsageRequest(request, response);
+      },
+    },
+  ],
 });
+
+const app = new App({ token: process.env.SLACK_BOT_TOKEN, receiver, logLevel: LogLevel.INFO });
 
 const systemPrompt = [
   "You are gpt, a helpful assistant in Slack.",
@@ -473,19 +482,28 @@ async function postMonthlyUsageReport(client) {
   }
 }
 
-app.receiver.app.post("/internal/monthly-usage", async (request, response) => {
+async function handleMonthlyUsageRequest(request, response) {
   try {
     if (!(await verifyMonthlyUsageRequest(request))) {
-      response.status(401).json({ error: "Unauthorized" });
+      response.writeHead(401, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "Unauthorized" }));
       return;
     }
     const result = await postMonthlyUsageReport(app.client);
-    response.status(200).json({ ok: true, alreadyReported: result.alreadyReported, period: result.period.yearMonth });
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(
+      JSON.stringify({
+        ok: true,
+        alreadyReported: result.alreadyReported,
+        period: result.period.yearMonth,
+      }),
+    );
   } catch (error) {
     console.error("Unable to post monthly OpenAI usage report", error);
-    response.status(500).json({ error: "Unable to post monthly usage report" });
+    response.writeHead(500, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ error: "Unable to post monthly usage report" }));
   }
-});
+}
 
 await app.start(process.env.PORT || 8080);
 console.log(`OpenAI Slack bot is listening for Slack Events with ${defaultModel}.`);
