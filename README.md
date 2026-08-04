@@ -28,7 +28,7 @@ gcloud run deploy openai-slack-bot \
   --allow-unauthenticated \
   --min 0 \
   --set-secrets OPENAI_API_KEY=openai-api-key:1,SLACK_BOT_TOKEN=slack-bot-token:1,SLACK_SIGNING_SECRET=slack-signing-secret:1 \
-  --set-env-vars OPENAI_MODEL=gpt-5.6-terra,ALLOWED_CHANNEL_IDS=CHANNEL_ID
+  --set-env-vars OPENAI_MODEL=gpt-5.6-sol,OPENAI_REASONING_EFFORT=max,ALLOWED_CHANNEL_IDS=CHANNEL_ID
 ```
 
 `CHANNEL_ID` は2人で使うプライベートチャンネルのIDに置き換える。`--min 0` なら、使っていない間はインスタンスが停止する。最初の応答が少し遅い場合だけ、必要に応じて `--min 1` に変更する。
@@ -45,7 +45,7 @@ npm run check
 npm run start:local
 ```
 
-通常の会話用モデルは `gpt-5.6-terra`、推論強度は `medium` です。必要なら `OPENAI_MODEL` を `gpt-5.6-sol` または `gpt-5.6-luna` に、`OPENAI_REASONING_EFFORT` を `low` / `medium` / `high` に変更できます。
+通常の会話用モデルは `gpt-5.6-sol`、推論強度は `max` です。運用上モデルや推論強度を切り替える場合は、Cloud Runまたはローカル環境の `OPENAI_MODEL` と `OPENAI_REASONING_EFFORT` を変更します。
 
 最新情報・確認・リンクが必要な質問では、OpenAI APIのWeb検索を自動で利用します。検索を使った回答には情報源リンクを含めます。
 
@@ -53,13 +53,6 @@ Slack の許可チャンネルで、次のようにメンションしてくだ�
 
 ```
 @gpt 今日の会議メモを3行で要約して
-```
-
-モデルを投稿ごとに指定することもできます。`sol` または `terra` をメンション直後の先頭に置きます。モデル名を省略した場合は Terra です。
-
-```
-@gpt sol この設計のリスクを詳しくレビューして
-@gpt terra 今日の会議メモを3行で要約して
 ```
 
 返信は元メッセージのスレッドに投稿されます。
@@ -77,8 +70,6 @@ Slack の許可チャンネルで、次のようにメンションしてくだ�
 ```
 @gpt image アザラシが夜の海を泳ぐ、映画のワンシーンのような画像
 ```
-
-モデル指定と組み合わせる場合は、`@gpt sol image ...` または `@gpt terra image ...` と書きます。
 
 この機能にはSlackアプリの `files:read` と `files:write` 権限が必要です。マニフェストを更新後、アプリをワークスペースへ再インストールしてください。
 

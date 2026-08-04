@@ -28,7 +28,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 const firestore = new Firestore();
 const tokenVerifier = new OAuth2Client();
-const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-terra";
+const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 const conversationCollection =
   process.env.FIRESTORE_CONVERSATION_COLLECTION || "slack_conversations";
 const transcriptionModel =
@@ -305,7 +306,7 @@ async function analyze(job, pdfInputs, segments, framePaths) {
   }
   const response = await openai.responses.create({
     model: job.model || defaultModel,
-    reasoning: { effort: process.env.OPENAI_REASONING_EFFORT || "medium" },
+    reasoning: { effort: reasoningEffort },
     instructions:
       "You are gpt in Slack. Reply in the user's language with Slack-compatible Markdown. For video and audio, cite timestamps from the supplied transcript when useful.",
     input: [{ role: "user", content }],

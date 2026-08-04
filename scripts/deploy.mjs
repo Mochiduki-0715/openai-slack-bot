@@ -15,6 +15,8 @@ const usageSchedulerServiceAccount =
   `gpt-monthly-usage-scheduler@${project}.iam.gserviceaccount.com`;
 const usageSecret = process.env.OPENAI_USAGE_SECRET || "openai-usage-admin-key";
 const openaiCostProject = process.env.OPENAI_COST_PROJECT_ID || "proj_11LZLIyW6LWVTNDmQNBE1Dsd";
+const openAIModel = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+const openAIReasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 
 function gcloud(args) {
   return execFileSync("gcloud", args, { encoding: "utf8" }).trim();
@@ -169,7 +171,7 @@ function deployReceiver(workerUrl, receiverUrl, channel) {
       serviceAccount,
       "--clear-base-image",
       "--update-env-vars",
-      `MEDIA_WORKER_URL=${workerUrl},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue},MONTHLY_USAGE_REPORT_CHANNEL_ID=${channel},MONTHLY_USAGE_SCHEDULER_SERVICE_ACCOUNT=${usageSchedulerServiceAccount},MONTHLY_USAGE_SCHEDULER_AUDIENCE=${receiverUrl},OPENAI_COST_PROJECT_ID=${openaiCostProject}`,
+      `OPENAI_MODEL=${openAIModel},OPENAI_REASONING_EFFORT=${openAIReasoningEffort},MEDIA_WORKER_URL=${workerUrl},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue},MONTHLY_USAGE_REPORT_CHANNEL_ID=${channel},MONTHLY_USAGE_SCHEDULER_SERVICE_ACCOUNT=${usageSchedulerServiceAccount},MONTHLY_USAGE_SCHEDULER_AUDIENCE=${receiverUrl},OPENAI_COST_PROJECT_ID=${openaiCostProject}`,
       "--update-secrets",
       `OPENAI_ADMIN_KEY=${usageSecret}:latest`,
       "--quiet",
@@ -179,8 +181,6 @@ function deployReceiver(workerUrl, receiverUrl, channel) {
 }
 
 function deployWorker() {
-  const model = process.env.OPENAI_MODEL || "gpt-5.6-terra";
-  const reasoning = process.env.OPENAI_REASONING_EFFORT || "medium";
   const conversationCollection =
     process.env.FIRESTORE_CONVERSATION_COLLECTION || "slack_conversations";
   return spawnSync(
@@ -216,7 +216,7 @@ function deployWorker() {
       "--set-secrets",
       "OPENAI_API_KEY=openai-api-key:latest,SLACK_BOT_TOKEN=slack-bot-token:latest",
       "--set-env-vars",
-      `OPENAI_MODEL=${model},OPENAI_REASONING_EFFORT=${reasoning},FIRESTORE_CONVERSATION_COLLECTION=${conversationCollection},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue},MEDIA_WORKER_AUDIENCE=https://placeholder.invalid`,
+      `OPENAI_MODEL=${openAIModel},OPENAI_REASONING_EFFORT=${openAIReasoningEffort},FIRESTORE_CONVERSATION_COLLECTION=${conversationCollection},MEDIA_TASK_SERVICE_ACCOUNT=${taskServiceAccount},MEDIA_TASK_QUEUE=${queue},MEDIA_WORKER_AUDIENCE=https://placeholder.invalid`,
       "--quiet",
     ],
     { stdio: "inherit" },

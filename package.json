@@ -7,7 +7,7 @@
     "start": "node src/index.mjs",
     "start:local": "node --env-file=.env src/index.mjs",
     "start:worker": "node src/media-worker.mjs",
-    "check": "node --check src/index.mjs && node --check src/media-jobs.mjs && node --check src/media-worker.mjs && node --check src/monthly-usage.mjs && node --check scripts/deploy.mjs && node --check scripts/setup-media-processing.mjs && node --check scripts/setup-monthly-usage-report.mjs",
+    "check": "node --check src/index.mjs && node --check src/request-selection.mjs && node --check src/media-jobs.mjs && node --check src/media-worker.mjs && node --check src/monthly-usage.mjs && node --check scripts/deploy.mjs && node --check scripts/setup-media-processing.mjs && node --check scripts/setup-monthly-usage-report.mjs",
     "test": "node --test",
     "deploy": "node scripts/deploy.mjs",
     "setup:media": "node scripts/setup-media-processing.mjs",

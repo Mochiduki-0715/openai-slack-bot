@@ -15,6 +15,7 @@ import {
   reserveMediaJob,
   safeJobId,
 } from "./media-jobs.mjs";
+import { selectRequest } from "./request-selection.mjs";
 
 const required = ["OPENAI_API_KEY", "SLACK_BOT_TOKEN", "SLACK_SIGNING_SECRET"];
 const missing = required.filter((name) => !process.env[name]);
@@ -24,12 +25,8 @@ if (missing.length > 0) {
 }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-terra";
-const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "medium";
-const mentionModels = {
-  sol: "gpt-5.6-sol",
-  terra: "gpt-5.6-terra",
-};
+const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 const allowedChannels = new Set(
   (process.env.ALLOWED_CHANNEL_IDS || "")
     .split(",")
@@ -76,30 +73,6 @@ const systemPrompt = [
 
 function withoutMentions(text) {
   return text.replace(/<@[A-Z0-9]+>/gi, "").trim();
-}
-
-function selectModel(text) {
-  let prompt = text;
-  let model = defaultModel;
-  let label = "Terra";
-  const modelMatch = prompt.match(/^(sol|terra)\b\s*/i);
-
-  if (modelMatch) {
-    const key = modelMatch[1].toLowerCase();
-    model = mentionModels[key];
-    label = key === "sol" ? "Sol" : "Terra";
-    prompt = prompt.slice(modelMatch[0].length).trim();
-  }
-
-  const imageCommandMatch = prompt.match(/^image\b\s*/i);
-  return {
-    model,
-    label,
-    prompt: imageCommandMatch
-      ? prompt.slice(imageCommandMatch[0].length).trim()
-      : prompt,
-    forceImageGeneration: Boolean(imageCommandMatch),
-  };
 }
 
 async function inputImageForSlackFile(client, file) {
@@ -338,7 +311,7 @@ app.event("app_mention", async ({ event, client, logger, body }) => {
 
   await acknowledgeMention(client, event, logger);
 
-  const selection = selectModel(withoutMentions(event.text));
+  const selection = selectRequest(withoutMentions(event.text), defaultModel);
   const { model, label, prompt, forceImageGeneration } = selection;
   const threadTs = event.thread_ts ?? event.ts;
 
