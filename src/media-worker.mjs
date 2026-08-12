@@ -11,6 +11,7 @@ import { Firestore } from "@google-cloud/firestore";
 import { WebClient } from "@slack/web-api";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
+import { politeToneInstruction } from "./bot-instructions.mjs";
 import {
   mediaJobRef,
   mediaMaxDurationSeconds,
@@ -307,8 +308,12 @@ async function analyze(job, pdfInputs, segments, framePaths) {
   const response = await openai.responses.create({
     model: job.model || defaultModel,
     reasoning: { effort: reasoningEffort },
-    instructions:
-      "You are gpt in Slack. Reply in the user's language with Slack-compatible Markdown. For video and audio, cite timestamps from the supplied transcript when useful.",
+    instructions: [
+      "You are gpt in Slack.",
+      "Reply in the user's language with Slack-compatible Markdown.",
+      politeToneInstruction,
+      "For video and audio, cite timestamps from the supplied transcript when useful.",
+    ].join(" "),
     input: [{ role: "user", content }],
   });
   return response.output_text?.trim() || "解析結果を生成できませんでした。";

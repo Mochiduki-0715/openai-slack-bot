@@ -2,6 +2,7 @@ import { App, HTTPReceiver, LogLevel } from "@slack/bolt";
 import { Firestore } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
+import { politeToneInstruction } from "./bot-instructions.mjs";
 import { fetchOpenAICosts, monthlyUsageMessage, previousMonthRange } from "./monthly-usage.mjs";
 import {
   enqueueMediaTask,
@@ -62,6 +63,7 @@ const app = new App({ token: process.env.SLACK_BOT_TOKEN, receiver, logLevel: Lo
 const systemPrompt = [
   "You are gpt, a helpful assistant in Slack.",
   "Reply in the user's language and use plain Slack-compatible Markdown.",
+  politeToneInstruction,
   "Give detailed, well-structured answers: lead with the conclusion, then explain reasoning, practical steps, and important caveats when useful.",
   "Use web search when the user asks for current information, verification, links, or facts that may have changed. Do not search when it is unnecessary.",
   "When web search is used, include the most useful source links in the answer.",
