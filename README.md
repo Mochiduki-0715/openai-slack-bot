@@ -28,7 +28,7 @@ gcloud run deploy openai-slack-bot \
   --allow-unauthenticated \
   --min 0 \
   --set-secrets OPENAI_API_KEY=openai-api-key:1,SLACK_BOT_TOKEN=slack-bot-token:1,SLACK_SIGNING_SECRET=slack-signing-secret:1 \
-  --set-env-vars OPENAI_MODEL=gpt-5.6-sol,OPENAI_REASONING_EFFORT=max,ALLOWED_CHANNEL_IDS=CHANNEL_ID
+  --set-env-vars ALLOWED_CHANNEL_IDS=CHANNEL_ID
 ```
 
 `CHANNEL_ID` は2人で使うプライベートチャンネルのIDに置き換える。`--min 0` なら、使っていない間はインスタンスが停止する。最初の応答が少し遅い場合だけ、必要に応じて `--min 1` に変更する。
@@ -45,7 +45,7 @@ npm run check
 npm run start:local
 ```
 
-通常の会話用モデルは `gpt-5.6-sol`、推論強度は `max` です。運用上モデルや推論強度を切り替える場合は、Cloud Runまたはローカル環境の `OPENAI_MODEL` と `OPENAI_REASONING_EFFORT` を変更します。
+通常会話・画像読取り・メディア解析は、`gpt-6-astra` と `reasoning: { mode: "pro", effort: "max" }` に固定しています。Cloud Runやローカルの環境変数では変更できません。Slackの回答には「Astra」と表示します。
 
 回答は、ユーザーが別の口調を明示的に指定しない限り、丁寧で自然な口調になります。日本語では「です・ます調」を使用します。この設定は通常回答とPDF・動画・音声の解析結果に共通です。
 
@@ -93,6 +93,8 @@ PDFを添付して `@gpt` をメンションすると、本文だけでなく表
 
 メディア処理はCloud Tasksで非同期化した専用の非公開Cloud Runワーカーが担当します。`npm run deploy` はCloud Tasks、必要なサービスアカウントとIAM、ワーカー、受信サービスを順に設定します。初回だけSlackアプリの `files:read` と `files:write` を再承認してください。
 
+更新前に登録された処理待ちジョブも、保存済みのモデル指定・表示名を使わず、AstraのProモード・推論強度 `max` で解析・表示します。新規ジョブにはモデル指定を保存せず、既存ジョブの一括データ移行は不要です。
+
 ### スレッド内の会話の継続
 
 同じスレッドで再度 `@gpt` をメンションすると、ボットがそのスレッドで受け取った直近の質問と回答を文脈として引き継ぎます。人同士の投稿や、ボットをメンションしていない投稿は読み込みません。
@@ -129,7 +131,7 @@ Firestoreデータベースを作成後、Cloud Runのデプロイ時に `--serv
 
 `FIRESTORE_CONVERSATION_COLLECTION` は保存先の親コレクション名で、既定値は `slack_conversations` です。
 
-`OPENAI_IMAGE_MODEL` はResponses APIの画像生成ツールに使うモデルで、既定値は最新の `gpt-image-2` です。テキスト回答・画像読取りに使う `OPENAI_MODEL` とは分けているため、画像生成の品質は独立して指定できます。
+`OPENAI_IMAGE_MODEL` はResponses APIの画像生成ツールに使うモデルで、既定値は `gpt-image-2` です。画像生成専用モデルは、テキスト回答・画像読取りに使うAstraとは独立して指定できます。文字起こし専用モデルも `OPENAI_TRANSCRIPTION_MODEL` で指定でき、既定値は `gpt-4o-transcribe-diarize` です。
 
 ### 毎月のOpenAI API利用額通知
 

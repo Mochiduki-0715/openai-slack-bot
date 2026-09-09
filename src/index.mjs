@@ -3,6 +3,7 @@ import { Firestore } from "@google-cloud/firestore";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
 import { politeToneInstruction } from "./bot-instructions.mjs";
+import { botModel, botModelLabel, createBotResponse } from "./bot-model.mjs";
 import { fetchOpenAICosts, monthlyUsageMessage, previousMonthRange } from "./monthly-usage.mjs";
 import {
   enqueueMediaTask,
@@ -26,8 +27,6 @@ if (missing.length > 0) {
 }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-sol";
-const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 const allowedChannels = new Set(
   (process.env.ALLOWED_CHANNEL_IDS || "")
     .split(",")
@@ -262,8 +261,6 @@ async function queueMediaJob(client, event, selection, body, logger) {
     threadTs,
     eventTs: event.ts,
     prompt: selection.prompt || "添付メディアを解析してください。",
-    model: selection.model,
-    label: selection.label,
     sources,
     expiresAt,
   };
@@ -313,8 +310,9 @@ app.event("app_mention", async ({ event, client, logger, body }) => {
 
   await acknowledgeMention(client, event, logger);
 
-  const selection = selectRequest(withoutMentions(event.text), defaultModel);
-  const { model, label, prompt, forceImageGeneration } = selection;
+  const selection = selectRequest(withoutMentions(event.text));
+  const { prompt, forceImageGeneration } = selection;
+  const label = botModelLabel;
   const threadTs = event.thread_ts ?? event.ts;
 
   if (!prompt && eventFiles(event).length === 0) {
@@ -347,9 +345,7 @@ app.event("app_mention", async ({ event, client, logger, body }) => {
     const userPrompt = prompt || "添付画像を解析してください。";
     const storedPrompt = images.length > 0 ? `${userPrompt}\n[添付画像: ${images.length}件]` : userPrompt;
     const history = await getConversationHistory(event.channel, threadTs);
-    const response = await openai.responses.create({
-      model,
-      reasoning: { effort: reasoningEffort },
+    const response = await createBotResponse(openai, {
       tools: [
         { type: "web_search" },
         { type: "image_generation", action: "auto", model: imageModel },
@@ -481,4 +477,4 @@ async function handleMonthlyUsageRequest(request, response) {
 }
 
 await app.start(process.env.PORT || 8080);
-console.log(`OpenAI Slack bot is listening for Slack Events with ${defaultModel}.`);
+console.log(`OpenAI Slack bot is listening for Slack Events with ${botModel} (pro/max).`);
