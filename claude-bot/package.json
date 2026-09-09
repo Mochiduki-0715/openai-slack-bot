@@ -1,0 +1,19 @@
+{
+  "name": "claude-slack-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/index.mjs",
+    "start:local": "node --env-file=.env src/index.mjs",
+    "check": "node --check src/index.mjs && node --check src/handler.mjs && node --check src/conversations.mjs && node --check src/model.mjs && node --check src/slack-input.mjs && node --check src/slack-output.mjs && node --check scripts/deploy.mjs",
+    "test": "node --test test/*.test.mjs",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
+    "@google-cloud/firestore": "^8.6.0",
+    "@slack/bolt": "^4.2.1"
+  }
+}

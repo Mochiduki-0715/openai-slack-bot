@@ -2,6 +2,8 @@
 
 Slack でボットをメンションすると、OpenAI API を使ってスレッドに返信する最小構成のボットです。Google Cloud Run に配置する構成なので、PCを起動しておく必要はありません。通常はリクエストがない間、インスタンスをゼロまで縮小します。
 
+Claude botのソース・依存関係・デプロイ設定は [`claude-bot/`](./claude-bot/README.md) に分けています。同じSlackスレッドでは両botが質問・回答の履歴を共有し、`@gpt` → `@claude` → `@gpt` と切り替えて会話を続けられます。切り替え先のAPIにも、そのスレッドでbotが保存した過去の質問・回答・解析結果を送ります。添付原本は履歴に保存しないため、再読取りには再添付が必要です。
+
 ## 1. Slack アプリを作成する
 
 1. [Slack API](https://api.slack.com/apps) で **Create New App** → **From an app manifest** を選ぶ。
