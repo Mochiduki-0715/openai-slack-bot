@@ -12,6 +12,7 @@ import { WebClient } from "@slack/web-api";
 import { OAuth2Client } from "google-auth-library";
 import OpenAI from "openai";
 import { politeToneInstruction } from "./bot-instructions.mjs";
+import { botModel, botModelLabel, createBotResponse } from "./bot-model.mjs";
 import {
   mediaJobRef,
   mediaMaxDurationSeconds,
@@ -29,8 +30,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN);
 const firestore = new Firestore();
 const tokenVerifier = new OAuth2Client();
-const defaultModel = process.env.OPENAI_MODEL || "gpt-5.6-sol";
-const reasoningEffort = process.env.OPENAI_REASONING_EFFORT || "max";
 const conversationCollection =
   process.env.FIRESTORE_CONVERSATION_COLLECTION || "slack_conversations";
 const transcriptionModel =
@@ -305,9 +304,7 @@ async function analyze(job, pdfInputs, segments, framePaths) {
       detail: "low",
     });
   }
-  const response = await openai.responses.create({
-    model: job.model || defaultModel,
-    reasoning: { effort: reasoningEffort },
+  const response = await createBotResponse(openai, {
     instructions: [
       "You are gpt in Slack.",
       "Reply in the user's language with Slack-compatible Markdown.",
@@ -416,7 +413,7 @@ async function processJob(jobId) {
         title: "文字起こし",
       });
     }
-    await updateReceipt(job, `_${job.label || "Terra"}で解析完了_\n${answer}`);
+    await updateReceipt(job, `_${botModelLabel}で解析完了_\n${answer}`);
     await saveConversationTurn(job.channel, job.threadTs, job.prompt, answer);
     await ref.update({ status: "completed", completedAt: new Date(), transcriptStored: segments.length > 0 });
   } catch (error) {
@@ -470,5 +467,5 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(process.env.PORT || 8080, () => {
-  console.log("OpenAI Slack media worker is listening for Cloud Tasks.");
+  console.log(`OpenAI Slack media worker is listening for Cloud Tasks with ${botModel} (pro/max).`);
 });
